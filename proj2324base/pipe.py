@@ -17,25 +17,64 @@ from search import (
     recursive_best_first_search,
 )
 
-
 class PipeManiaState:
     state_id = 0
 
-    def __init__(self, board):
+    def __init__(self, board, position=None):
         self.board = board
+        self.position = position if position is not None else (0, 0)
         self.id = PipeManiaState.state_id
         PipeManiaState.state_id += 1
 
     def __lt__(self, other):
         return self.id < other.id
 
-    # TODO: outros metodos da classe
+    def __eq__(self, other):
+        return self.board == other.board and self.position == other.position
+
+    def __hash__(self):
+        return hash((tuple(map(tuple, self.board.board)), self.position))
+
+    # Add a method to print the board for debugging
+    def print_board(self):
+        for row in self.board.board:
+            print(' '.join(row))
+        print()
 
 
 class Board:
     """Representação interna de um tabuleiro de PipeMania."""
-    def __init__(self, board, rows, cols):
-        self.board = board
+
+    pieces = {
+        "Fecho": {
+            "Cima": "FC",
+            "Baixo": "FB",
+            "Esquerda": "FE",
+            "Direita": "FD"
+        },
+        "Bifurcacao": {
+            "Cima": "BC",
+            "Baixo": "BB",
+            "Esquerda": "BE",
+            "Direita": "BD"
+        },
+        "Volta": {
+            "Cima": "VC",
+            "Baixo": "VB",
+            "Esquerda": "VE",
+            "Direita": "VD"
+        },
+        "Ligacao": {
+            "Horizontal": "LH",
+            "Vertical": "LV"
+        }
+    }
+
+    rotate_directions = ['clockwise', 'counterclockwise']
+    directions = [(0, -1), (0, 1), (-1, 0), (1, 0)]
+
+    def __init__(self, boardList, rows, cols):
+        self.board = boardList
         self.rows = rows
         self.cols = cols
 
@@ -55,39 +94,127 @@ class Board:
         row_below = None
         if row > 0:
             row_above = self.get_value(row - 1, col)
-        elif row < self.rows - 1:
+        if row < self.rows - 1:
             row_below = self.get_value(row + 1, col)
         return row_above, row_below
 
     def adjacent_horizontal_values(self, row: int, col: int) -> (str, str):
         """Devolve os valores imediatamente à esquerda e à direita,
         respectivamente."""
-        # TODO
-        right_col = None
         left_col = None
+        right_col = None
         if col > 0:
             left_col = self.get_value(row, col - 1)
-        elif col < self.cols - 1:
+        if col < self.cols - 1:
             right_col = self.get_value(row, col + 1)
         return left_col, right_col
 
     def on_corner(self, row: int, col: int) -> bool:
         """Verifica se a peça na posição (row, col) está num canto."""
-        if row == 0 and col == 0:
-            return True
-        elif row == 0 and col == self.cols:
-            return True
-        elif row == self.rows and col == 0:
-            return True
-        elif row == self.rows and col == self.cols:
+        if (row == 0 or row == self.rows - 1) and (col == 0 or col == self.cols - 1):
             return True
         return False
 
     def on_margin(self, row: int, col: int) -> bool:
         """Verifica se a peça na posição (row, col) está uma margem."""
-        # TODO
-        if row == 0 or col == 0 or row == self.rows or col == self.cols:
+        if row == 0 or row == self.rows - 1 or col == 0 or col == self.cols - 1:
             return True
+        return False
+
+    def is_corner(self, row: int, col: int, piece: str) -> bool:
+        """Verifica se a peça na posição (row, col) está num canto e, se estiver, invalida posiçoes incorretas."""
+        if piece not in self.pieces or piece in self.pieces["Bifurcacao"].values() or piece in self.pieces["Ligacao"].values():
+            return False
+        if piece in self.pieces["Fecho"].values():
+            if row == 0 and col == 0:
+                if piece in ["FC", "FE"]:
+                    return False
+            elif row == 0 and col != 0:
+                if value in ["FB", "FE"]:
+                    return False
+            elif row != 0 and col == 0:
+                if value in ["FC", "FD"]:
+                    return False
+            elif row != 0 and col != 0:
+                if value in ["FB", "FD"]:
+                    return False
+        elif piece in self.pieces["Volta"].values():
+            if row == 0 and col == 0:
+                if piece in ["VC", "VE", "VD"]:
+                    return False
+            elif row == 0 and col != 0:
+                if piece in ["VB", "VE", "VC"]:
+                    return False
+            elif row != 0 and col == 0:
+                if piece in ["VC", "VD", "VB"]:
+                    return False
+            elif row != 0 and col != 0:
+                if piece in ["VB", "VD", "VC"]:
+                    return False
+        return True
+
+
+    def is_connected(self, pos1: tuple, pos2: tuple) -> bool:
+        row1, col1 = pos1
+        row2, col2 = pos2
+        # print(row1, col1, row2, col2)
+
+        # Check if the positions are adjacent
+        if abs(row1 - row2) + abs(col1 - col2) != 1:
+            return False
+
+        # Check if the pieces are connected based on their types
+        piece1 = self.get_value(row1, col1)
+        piece2 = self.get_value(row2, col2)
+        #make sure that piece1 is always the piece on the left or above
+        if row1 > row2 or col1 > col2:
+            row1, col1, row2, col2 = row2, col2, row1, col1
+            piece1, piece2 = piece2, piece1
+
+        if row1 == row2:  # Horizontal connection, piece1 is right-oriented
+            if col1 < col2:
+                if piece1 in ["FD"] and piece2 in ["BC", "BB", "BE", "VC", "VE", "LH"]:
+                    return True
+                elif piece1 in ["VB"] and piece2 in ["BC", "BB", "BE", "VC", "VE", "LH", "FE"]:
+                    return True
+                elif piece1 in ["BD"] and piece2 in ["BC", "BB", "BE", "VC", "VE", "LH", "FE"]:
+                    return True
+                elif piece1 in ["BB"] and piece2 in ["BC", "BB", "BE", "VC", "VE", "LH", "FE"]:
+                    return True
+                elif piece1 in ["BC"] and piece2 in ["BC", "BB", "BE", "VC", "VE", "LH", "FE"]:
+                   return True
+                elif piece1 in ["VD"] and piece2 in ["BC", "BB", "BE", "VC", "VE", "LH", "FE"]:
+                    return True
+                elif piece1 in ["LH"] and piece2 in ["BC", "BB", "BE", "VC", "VE", "LH", "FE"]:
+                    return True
+            if col1 > col2:  # Horizontal connection, piece1 is left-oriented
+                if piece1 in ["FE"] and piece2 in ["BC", "BB", "BD", "VB", "VD", "LH"]:
+                    return True
+                elif piece1 in ["VE"] and piece2 in ["BC", "BB", "BD", "VB", "VD", "LH", "FD"]:
+                    return True
+                elif piece1 in ["BE"] and piece2 in ["BC", "BB", "BD", "VB", "VD", "LH", "FD"]:
+                    return True
+                elif piece1 in ["BB"] and piece2 in ["BC", "BB", "BD", "VB", "VD", "LH", "FD"]:
+                    return True
+                elif piece1 in ["BC"] and piece2 in ["BC", "BB", "BD", "VB", "VD", "LH", "FD"]:
+                    return True
+                elif piece1 in ["VC"] and piece2 in ["BC", "BB", "BD", "VB", "VD", "LH", "FD"]:
+                    return True
+                elif piece1 in ["LH"] and piece2 in ["BC", "BB", "BD", "VB", "VD", "LH", "FD"]:
+                    return True
+
+        elif col1 == col2:  # Vertical connection
+            if row1 < row2:
+                if piece1 in ["BE", "BD", "BC", "VC", "VD", "LV" ] and piece2 in ["BD", "BB", "BE", "VB", "VE", "LV", "FB"]:
+                    return True
+                elif piece1 in ["FB"] and piece2 in ["BC", "BE", "BD", "VC", "VD", "LV"]:
+                    return True
+            if row1 > row2:
+                if piece1 in ["BE", "BD", "BB", "VB", "VE", "LV"] and piece2 in ["BD", "BE", "BC", "VC", "VD", "LV", "FC"]:
+                    return True
+                elif piece1 in ["FC"] and piece2 in ["BB", "BE", "BD", "VB", "VE", "LV"]:
+                    return True
+
         return False
 
 
@@ -95,61 +222,185 @@ class Board:
     @staticmethod
     def parse_instance():
         """Lê o test do standard input (stdin) que é passado como argumento
-        e retorna uma instância da classe Board.
+        e retorna uma instância da classe Board."""
+        line = sys.stdin.readline().strip().split()
+        boardList = [line]
+        for line in sys.stdin:
+            boardList.append(line.strip().split())
 
-        Por exemplo:
-            $ python3 pipe.py < test-01.txt
-
-            > from sys import stdin
-            > line = stdin.readline().split()
-        """
-        # TODO
-        pass
-
-
-
-    # TODO: outros metodos da classe
+        rows = len(boardList)
+        cols = len(boardList[0])
+        return Board(boardList, rows, cols)
 
 
 class PipeMania(Problem):
-    def __init__(self, board: Board):
+    def __init__(self, board):
         """O construtor especifica o estado inicial."""
-        # TODO
-        self.initial = PipeManiaState(board)
+        self.initial = PipeManiaState(board, None)
 
     def actions(self, state: PipeManiaState):
         """Retorna uma lista de ações que podem ser executadas a
         partir do estado passado como argumento."""
-        # TODO
-        pass
+        actions = []
+        for row in range(state.board.rows):
+            for col in range(state.board.cols):
+                for direction in state.board.rotate_directions:
+                    actions.append((row, col, direction))
+        print (actions)
+        return actions
+
+
 
     def result(self, state: PipeManiaState, action):
-        """Retorna o estado resultante de executar a 'action' sobre
-        'state' passado como argumento. A ação a executar deve ser uma
-        das presentes na lista obtida pela execução de
-        self.actions(state)."""
-        # TODO
-        pass
+        # deep copy the board, check if a rotation is valid, and if it is, return the new state
+        row, col, direction = action
+        piece = state.board.get_value(row, col)
+        new_board = [list(row) for row in state.board.board]  # Deep copy the board
+
+        # rotate the piece
+        if direction == 'clockwise':
+            new_board[row][col] = self.rotate_clockwise(row, col, state)
+        elif direction == 'counterclockwise':
+            new_board[row][col] = self.rotate_counterclockwise(row, col, state)
+
+        new_state = PipeManiaState(Board(new_board, state.board.rows, state.board.cols), (row, col))
+        return new_state
+
 
     def goal_test(self, state: PipeManiaState):
-        """Retorna True se e só se o estado passado como argumento é
-        um estado objetivo. Deve verificar se todas as posições do tabuleiro
-        estão preenchidas de acordo com as regras do problema."""
-        # TODO
-        pass
+        connected_positions = set()
+        for row in range(state.board.rows):
+            for col in range(state.board.cols):
+                for drow, dcol in state.board.directions:
+                    adj_row, adj_col = row + drow, col + dcol
+                    if 0 <= adj_row < state.board.rows and 0 <= adj_col < state.board.cols:
+                        connected_positions.add((row, col))
+                        connected_positions.add((adj_row, adj_col))
+                    #     print("connected", row, col, adj_row, adj_col)
+
+        return len(connected_positions) == state.board.rows * state.board.cols
 
     def h(self, node: Node):
-        """Função heuristica utilizada para a procura A*."""
-        # TODO
-        pass
+        state = node.state
+        correct_connections = 0
+        for row in range(state.board.rows):
+            for col in range(state.board.cols):
+                for drow, dcol in state.board.directions:
+                    adj_row, adj_col = row + drow, col + dcol
+                    if 0 <= adj_row < state.board.rows and 0 <= adj_col < state.board.cols:
+                        correct_connections += 1
+        return -(correct_connections // 2)  # Divide by 2 to account for each connection being counted twice
 
-    # TODO: outros metodos da classe
+    def rotate_clockwise(self, row, col, state: PipeManiaState):
+        # check if the rotation is valid
+        piece = self.initial.board.get_value(row, col)
 
+        if piece == 'FC':
+            if state.board.is_corner(row, col, 'FD'):
+                return 'FD'
+            return piece
+        elif piece == 'FD':
+            if state.board.is_corner(row, col, 'FB'):
+                return 'FB'
+            return piece
+        elif piece == 'FB':
+            if state.board.is_corner(row, col, 'FE'):
+                return 'FE'
+            return piece
+        elif piece == 'FE':
+            if state.board.is_corner(row, col, 'FC'):
+                return 'FC'
+            return piece
+        elif piece == 'VC':
+            if state.board.is_corner(row, col, 'VD'):
+                return 'VD'
+            return piece
+        elif piece == 'VD':
+            if state.board.is_corner(row, col, 'VB'):
+                return 'VB'
+            return piece
+        elif piece == 'VB':
+            if state.board.is_corner(row, col, 'VE'):
+                return 'VE'
+            return piece
+        elif piece == 'VE':
+            if state.board.is_corner(row, col, 'VC'):
+                return 'VC'
+            return piece
+        elif piece == 'BC':
+            return 'BD'
+        elif piece == 'BD':
+            return 'BB'
+        elif piece == 'BB':
+            return 'BE'
+        elif piece == 'BE':
+            return 'BC'
+        elif piece == 'LH':
+            return 'LV'
+        elif piece == 'LV':
+            return 'LH'
+
+    def rotate_counterclockwise(self, row, col, state: PipeManiaState):
+
+        piece = self.initial.board.get_value(row, col)
+
+        if piece == 'FC':
+            if state.board.is_corner(row, col, 'FE'):
+                return 'FE'
+            return piece
+        elif piece == 'FE':
+            if state.board.is_corner(row, col, 'FB'):
+                return 'FB'
+            return piece
+        elif piece == 'FB':
+            if state.board.is_corner(row,col, 'FD'):
+                return 'FD'
+            return piece
+        elif piece == 'FD':
+            if state.board.is_corner(row, col, 'FC'):
+                return 'FC'
+            return piece
+        elif piece == 'VC':
+            if state.board.is_corner(row, col, 'VE'):
+                return 'VE'
+            return piece
+        elif piece == 'VE':
+            if state.board.is_corner(row, col, 'VB'):
+                return 'VB'
+            return piece
+        elif piece == 'VB':
+            if state.board.is_corner(row, col, 'VD'):
+                return 'VD'
+            return piece
+        elif piece == 'VD':
+            if state.board.is_corner(row, col, 'VC'):
+                return 'VC'
+            return piece
+        elif piece == 'BC':
+            return 'BE'
+        elif piece == 'BE':
+            return 'BB'
+        elif piece == 'BB':
+            return 'BD'
+        elif piece == 'BD':
+            return 'BC'
+        elif piece == 'LH':
+            return 'LV'
+        elif piece == 'LV':
+            return 'LH'
 
 if __name__ == "__main__":
-    # TODO:
-    # Ler o ficheiro do standard input,
-    # Usar uma técnica de procura para resolver a instância,
-    # Retirar a solução a partir do nó resultante,
-    # Imprimir para o standard output no formato indicado.
-    pass
+    board = Board.parse_instance()
+    problem = PipeMania(board)
+    goal_node = astar_search(problem)
+    if goal_node is not None:
+        print("Is goal?", problem.goal_test(goal_node.state))
+        print("Solution:")
+        goal_node.state.print_board()
+    else:
+        print("No solution found")
+
+
+
+
+
