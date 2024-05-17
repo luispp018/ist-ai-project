@@ -121,9 +121,24 @@ class Board:
             return True
         return False
 
+    def possible_connections(self, row: int, col: int):
+        """ Devolve o numero de conexoes possiveis dependendo do tipo de peça."""
+        piece = self.get_value(row, col)
+        if piece in ["FC", "FD", "FB", "FE"]:
+            return 1
+        elif piece in ["VC", "VD", "VB", "VE"]:
+            return 2
+        elif piece in ["BC", "BD", "BB", "BE"]:
+            return 3
+        elif piece in ["LH", "LV"]:
+            return 2
+        return 0
+
     def is_corner(self, row: int, col: int, piece: str) -> bool:
         """Verifica se a peça na posição (row, col) está num canto e, se estiver, invalida posiçoes incorretas."""
         if piece not in self.pieces or piece in self.pieces["Bifurcacao"].values() or piece in self.pieces["Ligacao"].values():
+            return False
+        if self.on_corner(row, col) is False:
             return False
         if piece in self.pieces["Fecho"].values():
             if row == 0 and col == 0:
@@ -287,7 +302,7 @@ class PipeMania(Problem):
             for col in range(state.board.cols):
                 for drow, dcol in state.board.directions:
                     adj_row, adj_col = row + drow, col + dcol
-                    if 0 <= adj_row < state.board.rows and 0 <= adj_col < state.board.cols:
+                    if 0 <= adj_row < state.board.rows and 0 <= adj_col < state.board.cols and state.board.is_connected((row, col), (adj_row, adj_col)):
                         correct_connections += 1
         return -(correct_connections // 2)  # Divide by 2 to account for each connection being counted twice
 
@@ -325,7 +340,7 @@ class PipeMania(Problem):
             return piece
         elif piece == 'VE':
             if state.board.is_corner(row, col, 'VC'):
-                return 'VC'
+                return 'VB'
             return piece
         elif piece == 'BC':
             return 'BD'
