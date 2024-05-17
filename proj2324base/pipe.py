@@ -75,9 +75,15 @@ class Board:
         self.board = boardList
         self.rows = rows
         self.cols = cols
+        self.impossible_pieces = [[] for _ in range(rows * cols)]
+
         for row in range(self.rows):
             for col in range(self.cols):
                 self.correct_corners(row, col)
+
+        for row in range(self.rows):
+            for col in range(self.cols):
+                self.correct_margins(row, col)
 
     def get_value(self, row: int, col: int) -> str:
         """Devolve o valor na respetiva posição do tabuleiro."""
@@ -125,6 +131,16 @@ class Board:
         if row == 0 or row == self.rows - 1 or col == 0 or col == self.cols - 1:
             return True
         return False
+
+    def add_impossible_piece(self, row, col, piece_type):
+        """Adiciona uma peça impossível à lista de peças impossíveis."""
+        position_index = row * self.cols + col  # Calculate the index of the position in the flattened list
+        self.impossible_pieces[position_index].append(piece_type)  # Add the impossible piece to the list for the position
+
+    def get_impossible_pieces(self, row, col):
+        """Get the list of impossible pieces for a given position."""
+        position_index = row * self.cols + col  # Calculate the index of the position in the flattened list
+        return self.impossible_pieces[position_index]
 
     def possible_connections(self, row: int, col: int):
         """ Devolve o numero de conexoes possiveis dependendo do tipo de peça."""
@@ -200,6 +216,84 @@ class Board:
             elif current_value in self.pieces["Volta"]:
                 self.set_value(row, col, "VC")
 
+    def correct_margins(self, row: int, col: int):
+        """ Coloca as peças das margens corretamente."""
+        current_value = self.get_value(row, col)
+        if row == 0 and col != 0 and col != self.cols - 1:
+            if current_value in self.pieces["Fecho"]:
+                self.add_impossible_piece(row, col, "FC")
+                if current_value == "FC":
+                    self.set_value(row, col, "FE")
+            elif current_value in self.pieces["Volta"]:
+                self.add_impossible_piece(row, col, "VC")
+                self.add_impossible_piece(row, col, "VD")
+                if current_value == "VC" or current_value == "VD":
+                    self.set_value(row, col, "VE")
+            elif current_value in self.pieces["Ligacao"]:
+                self.add_impossible_piece(row, col, "LV")
+                self.set_value(row, col, "LH")
+            elif current_value in self.pieces["Bifurcacao"]:
+                self.add_impossible_piece(row, col, "BC")
+                self.add_impossible_piece(row, col, "BD")
+                self.add_impossible_piece(row, col, "BE")
+                self.set_value(row, col, "BB")
+
+        if row == self.rows - 1 and col != 0 and col != self.cols - 1:
+            if current_value in self.pieces["Fecho"]:
+                self.add_impossible_piece(row, col, "FB")
+                if current_value == "FB":
+                    self.set_value(row, col, "FD")
+            elif current_value in self.pieces["Volta"]:
+                self.add_impossible_piece(row, col, "VB")
+                self.add_impossible_piece(row, col, "VE")
+                if current_value == "VB" or current_value == "VE":
+                    self.set_value(row, col, "VC")
+            elif current_value in self.pieces["Bifurcacao"]:
+                self.add_impossible_piece(row, col, "BB")
+                self.add_impossible_piece(row, col, "BD")
+                self.add_impossible_piece(row, col, "BE")
+                self.set_value(row, col, "BC")
+            elif current_value in self.pieces["Ligacao"]:
+                self.add_impossible_piece(row, col, "LV")
+                self.set_value(row, col, "LH")
+
+        if col == 0 and row != 0 and row != self.rows - 1:
+            if current_value in self.pieces["Fecho"]:
+                self.add_impossible_piece(row, col, "FE")
+                if current_value == "FE":
+                    self.set_value(row, col, "FB")
+            elif current_value in self.pieces["Volta"]:
+                self.add_impossible_piece(row, col, "VE")
+                self.add_impossible_piece(row, col, "VC")
+                if current_value == "VE" or current_value == "VC":
+                    self.set_value(row, col, "VD")
+            elif current_value in self.pieces["Bifurcacao"]:
+                self.add_impossible_piece(row, col, "BE")
+                self.add_impossible_piece(row, col, "BB")
+                self.add_impossible_piece(row, col, "BC")
+                self.set_value(row, col, "BD")
+            elif current_value in self.pieces["Ligacao"]:
+                self.add_impossible_piece(row, col, "LH")
+                self.set_value(row, col, "LV")
+
+        if col == self.cols - 1 and row != 0 and row != self.rows - 1:
+            if current_value in self.pieces["Fecho"]:
+                self.add_impossible_piece(row, col, "FD")
+                if current_value == "FD":
+                    self.set_value(row, col, "FB")
+            elif current_value in self.pieces["Volta"]:
+                self.add_impossible_piece(row, col, "VD")
+                self.add_impossible_piece(row, col, "VB")
+                if current_value == "VD" or current_value == "VB":
+                    self.set_value(row, col, "VE")
+            elif current_value in self.pieces["Bifurcacao"]:
+                self.add_impossible_piece(row, col, "BD")
+                self.add_impossible_piece(row, col, "BB")
+                self.add_impossible_piece(row, col, "BC")
+                self.set_value(row, col, "BE")
+            elif current_value in self.pieces["Ligacao"]:
+                self.add_impossible_piece(row, col, "LH")
+                self.set_value(row, col, "LV")
 
 
 
@@ -307,7 +401,7 @@ class PipeMania(Problem):
         new_board = [list(row) for row in state.board.board]  # Deep copy the board
 
         # rotate the piece
-        if direction == 'clockwise':
+        if direction == 'clockwise' and (state.board.is_corner(row, col, piece) is False):
             new_board[row][col] = self.rotate_clockwise(row, col, state)
         elif direction == 'counterclockwise':
             new_board[row][col] = self.rotate_counterclockwise(row, col, state)
@@ -340,103 +434,80 @@ class PipeMania(Problem):
                         correct_connections += 1
         return -(correct_connections // 2)  # Divide by 2 to account for each connection being counted twice
 
+
     def rotate_clockwise(self, row, col, state: PipeManiaState):
         # check if the rotation is valid
         piece = self.initial.board.get_value(row, col)
-
+        newPiece = ''
         if piece == 'FC':
-            if state.board.is_corner(row, col, 'FD'):
-                return 'FD'
-            return piece
+            newPiece = 'FD'
         elif piece == 'FD':
-            if state.board.is_corner(row, col, 'FB'):
-                return 'FB'
-            return piece
+            newPiece = 'FB'
         elif piece == 'FB':
-            if state.board.is_corner(row, col, 'FE'):
-                return 'FE'
-            return piece
+            newPiece = 'FE'
         elif piece == 'FE':
-            if state.board.is_corner(row, col, 'FC'):
-                return 'FC'
-            return piece
+            newPiece = 'FC'
         elif piece == 'VC':
-            if state.board.is_corner(row, col, 'VD'):
-                return 'VD'
-            return piece
+            newPiece = 'VD'
         elif piece == 'VD':
-            if state.board.is_corner(row, col, 'VB'):
-                return 'VB'
-            return piece
+            newPiece = 'VB'
         elif piece == 'VB':
-            if state.board.is_corner(row, col, 'VE'):
-                return 'VE'
-            return piece
+            newPiece = 'VE'
         elif piece == 'VE':
-            if state.board.is_corner(row, col, 'VC'):
-                return 'VB'
-            return piece
+            newPiece = 'VB'
         elif piece == 'BC':
-            return 'BD'
+            newPiece = 'BD'
         elif piece == 'BD':
-            return 'BB'
+            newPiece = 'BB'
         elif piece == 'BB':
-            return 'BE'
+            newPiece = 'BE'
         elif piece == 'BE':
-            return 'BC'
+            newPiece = 'BC'
         elif piece == 'LH':
-            return 'LV'
+            newPiece = 'LV'
         elif piece == 'LV':
-            return 'LH'
+            newPiece = 'LH'
+
+        if newPiece in state.board.get_impossible_pieces(row, col):
+            return piece
+        return newPiece
 
     def rotate_counterclockwise(self, row, col, state: PipeManiaState):
-
         piece = self.initial.board.get_value(row, col)
-
+        newPiece = ''
         if piece == 'FC':
-            if state.board.is_corner(row, col, 'FE'):
-                return 'FE'
-            return piece
+            newPiece = 'FE'
         elif piece == 'FE':
-            if state.board.is_corner(row, col, 'FB'):
-                return 'FB'
-            return piece
+            newPiece = 'FB'
         elif piece == 'FB':
-            if state.board.is_corner(row,col, 'FD'):
-                return 'FD'
-            return piece
+            newPiece = 'FD'
         elif piece == 'FD':
-            if state.board.is_corner(row, col, 'FC'):
-                return 'FC'
-            return piece
+            newPiece = 'FC'
         elif piece == 'VC':
-            if state.board.is_corner(row, col, 'VE'):
-                return 'VE'
-            return piece
+            newPiece = 'VE'
         elif piece == 'VE':
-            if state.board.is_corner(row, col, 'VB'):
-                return 'VB'
-            return piece
+            newPiece = 'VB'
         elif piece == 'VB':
-            if state.board.is_corner(row, col, 'VD'):
-                return 'VD'
-            return piece
+            newPiece = 'VD'
         elif piece == 'VD':
-            if state.board.is_corner(row, col, 'VC'):
-                return 'VC'
-            return piece
+            newPiece = 'VC'
         elif piece == 'BC':
-            return 'BE'
+            newPiece = 'BE'
         elif piece == 'BE':
-            return 'BB'
+            newPiece = 'BB'
         elif piece == 'BB':
-            return 'BD'
+            newPiece = 'BD'
         elif piece == 'BD':
-            return 'BC'
+            newPiece = 'BC'
         elif piece == 'LH':
-            return 'LV'
+            newPiece = 'LV'
         elif piece == 'LV':
-            return 'LH'
+            newPiece = 'LH'
+
+        if newPiece in state.board.get_impossible_pieces(row, col):
+            return piece
+        return newPiece
+
 
 if __name__ == "__main__":
     board = Board.parse_instance()
