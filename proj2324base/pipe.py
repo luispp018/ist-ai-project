@@ -38,35 +38,33 @@ class PipeManiaState:
     # Add a method to print the board for debugging
     def print_board(self):
         for row in self.board.board:
-            print(' '.join(row))
-        print()
-
+            print('\t'.join(row))
 
 class Board:
     """Representação interna de um tabuleiro de PipeMania."""
 
     pieces = {
         "Fecho": {
-            "Cima": "FC",
-            "Baixo": "FB",
-            "Esquerda": "FE",
-            "Direita": "FD"
+            "FC",
+            "FB",
+            "FE",
+            "FD"
         },
         "Bifurcacao": {
-            "Cima": "BC",
-            "Baixo": "BB",
-            "Esquerda": "BE",
-            "Direita": "BD"
+            "BC",
+            "BB",
+            "BE",
+            "BD"
         },
         "Volta": {
-            "Cima": "VC",
-            "Baixo": "VB",
-            "Esquerda": "VE",
-            "Direita": "VD"
+            "VC",
+            "VB",
+            "VE",
+            "VD"
         },
         "Ligacao": {
-            "Horizontal": "LH",
-            "Vertical": "LV"
+            "LH",
+            "LV"
         }
     }
 
@@ -77,6 +75,9 @@ class Board:
         self.board = boardList
         self.rows = rows
         self.cols = cols
+        for row in range(self.rows):
+            for col in range(self.cols):
+                self.correct_corners(row, col)
 
     def get_value(self, row: int, col: int) -> str:
         """Devolve o valor na respetiva posição do tabuleiro."""
@@ -84,6 +85,10 @@ class Board:
             return None
         else:
             return self.board[row][col]
+
+    def set_value(self, row: int, col: int, value: str):
+        """Define o valor na respetiva posição do tabuleiro."""
+        self.board[row][col] = value
 
     # Funcoes de verificaçao de posiçoes de peças
 
@@ -167,6 +172,35 @@ class Board:
                 if piece in ["VB", "VD", "VC"]:
                     return False
         return True
+
+    def correct_corners(self, row: int, col: int):
+        """ Coloca as peças dos cantos corretamente."""
+        current_value = self.get_value(row, col)
+        if row == 0 and col == 0:
+            if current_value in self.pieces["Fecho"]:
+                self.set_value(row, col, "FB")
+            elif current_value in self.pieces["Volta"]:
+                self.set_value(row, col, "VB")
+
+        if row == 0 and col == self.cols - 1:
+            if current_value in self.pieces["Fecho"]:
+                self.set_value(row, col, "FB")
+            elif current_value in self.pieces["Volta"]:
+                self.set_value(row, col, "VE")
+
+        if row == self.rows - 1 and col == 0:
+            if current_value in self.pieces["Fecho"]:
+                self.set_value(row, col, "FC")
+            elif current_value in self.pieces["Volta"]:
+                self.set_value(row, col, "VD")
+
+        if row == self.rows - 1 and col == self.cols - 1:
+            if current_value in self.pieces["Fecho"]:
+                self.set_value(row, col, "FC")
+            elif current_value in self.pieces["Volta"]:
+                self.set_value(row, col, "VC")
+
+
 
 
     def is_connected(self, pos1: tuple, pos2: tuple) -> bool:
@@ -409,8 +443,8 @@ if __name__ == "__main__":
     problem = PipeMania(board)
     goal_node = astar_search(problem)
     if goal_node is not None:
-        print("Is goal?", problem.goal_test(goal_node.state))
-        print("Solution:")
+    #    print("Is goal?", problem.goal_test(goal_node.state))
+    #    print("Solution:")
         goal_node.state.print_board()
     else:
         print("No solution found")
