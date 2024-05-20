@@ -81,14 +81,15 @@ class Board:
         self.impossible_pieces = [[] for _ in range(rows * cols)]
         self.connection_counts = [0] * (rows * cols)
         self.init_board()
+    #    print("###### NEW BOARD ######")
+    #    print("IMPOSSIBLE PIECES: ", self.impossible_pieces)
 
     def init_board(self):
         for row in range(self.rows):
             for col in range(self.cols):
                 self.correct_corners(row, col)
-        for row in range(self.rows):
-            for col in range(self.cols):
                 self.correct_margins(row, col)
+                self.adjacent_fechos(row, col)
         self.board = tuple(tuple(row) for row in self.board)  # Ensure it is converted to a tuple of tuples
 
     def get_value(self, row: int, col: int) -> str:
@@ -185,9 +186,8 @@ class Board:
         count = 0
         for row in range(self.rows):
             for col in range(self.cols):
-                position_index = row * self.cols + col
-                #print("ROW: ", row, "COL: ", col, "COUNT: ", self.connection_counts[position_index])
-                count += self.connection_counts[position_index]
+                if self.is_piece_connected(row, col):
+                    count += 1
         #    print("COUNT: ", count)
         return count
 
@@ -322,6 +322,68 @@ class Board:
                 self.add_impossible_piece(row, col, "LH")
                 self.set_value(row, col, "LV")
 
+    def adjacent_fechos(self, row: int, col: int):
+        """ Devolve o fecho adjacente, caso exista"""
+
+        current_value = self.get_value(row, col)
+        if current_value not in self.pieces["Fecho"]:
+            return
+
+        # Check if the adjacent piece horizontally to the left is a fecho
+        if col > 0 and self.get_value(row, col - 1) in self.pieces["Fecho"]:
+            self.add_impossible_piece(row, col, "FE")
+            self.rotate_piece(row, col, "clockwise")
+
+        # Check if the adjacent piece horizontally to the right is a fecho
+        elif col < self.cols - 1 and self.get_value(row, col + 1) in self.pieces["Fecho"]:
+            self.add_impossible_piece(row, col, "FD")
+            self.rotate_piece(row, col, "clockwise")
+
+        # Check if the adjacent piece vertically above is a fecho
+        elif row > 0 and self.get_value(row - 1, col) in self.pieces["Fecho"]:
+            self.add_impossible_piece(row, col, "FC")
+            self.rotate_piece(row, col, "clockwise")
+
+        # Check if the adjacent piece vertically below is a fecho
+        elif row < self.rows - 1 and self.get_value(row + 1, col) in self.pieces["Fecho"]:
+            self.add_impossible_piece(row, col, "FB")
+            self.rotate_piece(row, col, "clockwise")
+
+
+    def rotate_piece(self, row, col, direction):
+        """Gira uma peça no sentido horário ou anti-horário."""
+        piece = self.get_value(row, col)
+
+        while True:
+            new_piece = ""
+
+            if piece in Board.pieces["Fecho"]:
+                if direction == 'clockwise':
+                    new_piece = {'FC': 'FD', 'FD': 'FB', 'FB': 'FE', 'FE': 'FC'}[piece]
+                else:
+                    new_piece = {'FC': 'FE', 'FE': 'FB', 'FB': 'FD', 'FD': 'FC'}[piece]
+            elif piece in Board.pieces["Bifurcacao"]:
+                if direction == 'clockwise':
+                    new_piece = {'BC': 'BD', 'BD': 'BB', 'BB': 'BE', 'BE': 'BC'}[piece]
+                else:
+                    new_piece = {'BC': 'BE', 'BE': 'BB', 'BB': 'BD', 'BD': 'BC'}[piece]
+            elif piece in Board.pieces["Volta"]:
+                if direction == 'clockwise':
+                    new_piece = {'VC': 'VD', 'VD': 'VB', 'VB': 'VE', 'VE': 'VC'}[piece]
+                else:
+                    new_piece = {'VC': 'VE', 'VE': 'VB', 'VB': 'VD', 'VD': 'VC'}[piece]
+            elif piece in Board.pieces["Ligacao"]:
+                if piece == 'LH':
+                    new_piece = 'LV'
+                else:
+                    new_piece = 'LH'
+
+            #print("Rotating piece at row:", row, "col:", col, "from", piece, "to", new_piece)
+            if new_piece not in self.get_impossible_pieces(row,col):
+                return new_piece
+
+            piece = new_piece  # Update the piece to the new value that is impossible
+
 
 
     def is_connected(self, pos1: tuple, pos2: tuple) -> bool:
@@ -452,7 +514,9 @@ class PipeMania(Problem):
             for col in range(state.board.cols):
                 current_value = state.board.get_value(row, col)
                 for direction in Board.rotate_directions:
-                    new_value = self.rotate_piece(row, col, direction)
+                    if state.board.is_piece_connected(row, col):
+                        continue
+                    new_value = state.board.rotate_piece(row, col, direction)
                     if new_value != current_value:
                         actions.append((row, col, direction))
         return actions
@@ -463,7 +527,7 @@ class PipeMania(Problem):
         new_board = [list(row) for row in state.board.board]
         new_board_obj = Board(new_board, state.board.rows, state.board.cols)
         current_value = new_board_obj.get_value(row, col)
-        new_value = self.rotate_piece(row, col, direction)
+        new_value = state.board.rotate_piece(row, col, direction)
         new_board_obj.set_value(row, col, new_value)
         """print("\n")
         print("--------------------")
@@ -491,35 +555,8 @@ class PipeMania(Problem):
     def h(self, node):
         """Função heurística que estima a distância do estado atual ao estado objetivo."""
         connections = node.state.board.count_board_connections()
-        return node.state.board.rows * node.state.board.cols - (connections / 2)
+        return node.state.board.rows * node.state.board.cols - connections
 
-    def rotate_piece(self, row, col, direction):
-        """Gira uma peça no sentido horário ou anti-horário."""
-        piece = self.initial.board.get_value(row, col)
-        new_piece = ""
-        if piece in Board.pieces["Fecho"]:
-            if direction == 'clockwise':
-                new_piece = {'FC': 'FD', 'FD': 'FB', 'FB': 'FE', 'FE': 'FC'}[piece]
-            else:
-                new_piece = {'FC': 'FE', 'FE': 'FB', 'FB': 'FD', 'FD': 'FC'}[piece]
-        elif piece in Board.pieces["Bifurcacao"]:
-            if direction == 'clockwise':
-                new_piece = {'BC': 'BD', 'BD': 'BB', 'BB': 'BE', 'BE': 'BC'}[piece]
-            else:
-                new_piece = {'BC': 'BE', 'BE': 'BB', 'BB': 'BD', 'BD': 'BC'}[piece]
-        elif piece in Board.pieces["Volta"]:
-            if direction == 'clockwise':
-                new_piece = {'VC': 'VD', 'VD': 'VB', 'VB': 'VE', 'VE': 'VC'}[piece]
-            else:
-                new_piece = {'VC': 'VE', 'VE': 'VB', 'VB': 'VD', 'VD': 'VC'}[piece]
-        elif piece in Board.pieces["Ligacao"]:
-            if piece == 'LH':
-                new_piece = 'LV'
-            else:
-                new_piece = 'LH'
-        if new_piece in board.get_impossible_pieces(row,col):
-            return piece
-        return new_piece
 
 
 if __name__ == "__main__":
