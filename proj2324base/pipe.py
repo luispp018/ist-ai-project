@@ -80,9 +80,13 @@ class Board:
         self.cols = cols
         self.impossible_pieces = [[] for _ in range(rows * cols)]
         self.connection_counts = [0] * (rows * cols)
+        #print("###### NEW BOARD ######")
         self.init_board()
-    #    print("###### NEW BOARD ######")
-    #    print("IMPOSSIBLE PIECES: ", self.impossible_pieces)
+        #print("IMPOSSIBLE PIECES: ", self.impossible_pieces)
+        """for row in self.board:
+            print('\t'.join(row))
+        print("#######################\n")"""
+
 
     def init_board(self):
         for row in range(self.rows):
@@ -90,6 +94,7 @@ class Board:
                 self.correct_corners(row, col)
                 self.correct_margins(row, col)
                 self.adjacent_fechos(row, col)
+                #self.force_rotate_to_connect(row, col)
         self.board = tuple(tuple(row) for row in self.board)  # Ensure it is converted to a tuple of tuples
 
     def get_value(self, row: int, col: int) -> str:
@@ -188,7 +193,6 @@ class Board:
             for col in range(self.cols):
                 if self.is_piece_connected(row, col):
                     count += 1
-        #    print("COUNT: ", count)
         return count
 
 
@@ -332,23 +336,90 @@ class Board:
         # Check if the adjacent piece horizontally to the left is a fecho
         if col > 0 and self.get_value(row, col - 1) in self.pieces["Fecho"]:
             self.add_impossible_piece(row, col, "FE")
-            self.rotate_piece(row, col, "clockwise")
+            if current_value == "FE":
+                self.set_value(row, col, self.rotate_piece(row, col, "clockwise"))
 
         # Check if the adjacent piece horizontally to the right is a fecho
         elif col < self.cols - 1 and self.get_value(row, col + 1) in self.pieces["Fecho"]:
             self.add_impossible_piece(row, col, "FD")
-            self.rotate_piece(row, col, "clockwise")
+            if current_value == "FD":
+                self.set_value(row, col, self.rotate_piece(row, col, "clockwise"))
 
         # Check if the adjacent piece vertically above is a fecho
         elif row > 0 and self.get_value(row - 1, col) in self.pieces["Fecho"]:
             self.add_impossible_piece(row, col, "FC")
-            self.rotate_piece(row, col, "clockwise")
+            if current_value == "FC":
+                self.set_value(row, col, self.rotate_piece(row, col, "clockwise"))
 
         # Check if the adjacent piece vertically below is a fecho
         elif row < self.rows - 1 and self.get_value(row + 1, col) in self.pieces["Fecho"]:
             self.add_impossible_piece(row, col, "FB")
-            self.rotate_piece(row, col, "clockwise")
+            if current_value == "FB":
+                self.set_value(row, col, self.rotate_piece(row, col, "clockwise"))
 
+    def are_rotations_possible(self, row, col):
+        """ Verifica se é possível rodar a peça na posição (row, col)"""
+        current_value = self.get_value(row, col)
+        for direction in self.rotate_directions:
+            new_value = self.rotate_piece(row, col, direction)
+            if new_value != current_value:
+                return True
+        return False
+
+    def is_adjacent_rotation_smart(self, row, col, adj_row, adj_col):
+        """ Verifica se a rotação da peça na posição (adj_row, adj_col) é inteligente"""
+        current_value = self.get_value(row, col)
+        if current_value in self.pieces["Fecho"]:
+            if current_value[1] == 'C':
+                if adj_row == row - 1 and adj_col == col:
+                    return True
+            if current_value[1] == 'D':
+                if adj_row == row and adj_col == col + 1:
+                    return True
+            if current_value[1] == 'B':
+                if adj_row == row + 1 and adj_col == col:
+                    return True
+            if current_value[1] == 'E':
+                if adj_row == row and adj_col == col - 1:
+                    return True
+
+        if current_value in self.pieces["Volta"]:
+            if current_value[1] == 'C':
+                if (adj_row == row - 1 and adj_col == col) or (adj_row == row and adj_col == col - 1):
+                    return True
+            if current_value[1] == 'D':
+                if (adj_row == row and adj_col == col + 1) or (adj_row == row - 1 and adj_col == col):
+                    return True
+            if current_value[1] == 'B':
+                if (adj_row == row + 1 and adj_col == col) or (adj_row == row and adj_col == col + 1):
+                    return True
+            if current_value[1] == 'E':
+                if (adj_row == row and adj_col == col - 1) or (adj_row == row + 1 and adj_col == col):
+                    return True
+
+        if current_value in self.pieces["Bifurcacao"]:
+            if current_value[1] == 'C':
+                if (adj_row == row - 1 and adj_col == col) or (adj_row == row and adj_col == col - 1) or (adj_row == row and adj_col == col + 1):
+                    return True
+            if current_value[1] == 'D':
+                if (adj_row == row and adj_col == col + 1) or (adj_row == row + 1 and adj_col == col) or (adj_row == row - 1 and adj_col == col):
+                    return True
+            if current_value[1] == 'B':
+                if (adj_row == row + 1 and adj_col == col) or (adj_row == row and adj_col == col - 1) or (adj_row == row and adj_col == col + 1):
+                    return True
+            if current_value[1] == 'E':
+                if (adj_row == row and adj_col == col - 1) or (adj_row == row - 1 and adj_col == col) or (adj_row == row + 1 and adj_col == col):
+                    return True
+
+        if current_value in self.pieces["Ligacao"]:
+            if current_value == "LH":
+                if (adj_row == row and adj_col == col - 1) or (adj_row == row and adj_col == col + 1):
+                    return True
+            if current_value == "LV":
+                if (adj_row == row - 1 and adj_col == col) or (adj_row == row + 1 and adj_col == col):
+                    return True
+
+        return False # If the piece is not connected to the adjacent piece
 
     def rotate_piece(self, row, col, direction):
         """Gira uma peça no sentido horário ou anti-horário."""
@@ -378,7 +449,6 @@ class Board:
                 else:
                     new_piece = 'LH'
 
-            #print("Rotating piece at row:", row, "col:", col, "from", piece, "to", new_piece)
             if new_piece not in self.get_impossible_pieces(row,col):
                 return new_piece
 
@@ -398,14 +468,8 @@ class Board:
         # Check if the pieces are connected based on their types
         piece1 = self.get_value(row1, col1)
         piece2 = self.get_value(row2, col2)
-        #    print("PIECE1: ", piece1, "PIECE2: ", piece2, "COL1:", col1, "COL2:", col2)
+        #print("Checking connection between", row1, col1, piece1, row2, col2, piece2)
 
-        # Ensure piece1 is always the piece on the left or above
-        """if row1 > row2 or col1 > col2:
-            row1, col1, row2, col2 = row2, col2, row1, col1
-            piece1, piece2 = piece2, piece1
-            position_index1 = row1 * self.cols + col1"""
-        #print(self.get_impossible_pieces(row1, col1), row1, col1, piece1)
         if row1 == row2:  # Horizontal connection
             if col1 < col2:  # piece1 is right-oriented
                 if piece1 == "FD" and piece2 in ["BC", "BB", "BE", "VC", "VE", "LH"]:
@@ -413,10 +477,9 @@ class Board:
                     return True
                 if piece1 in ["VB", "BD", "BB", "BC", "VD", "LH"] and piece2 in ["BC", "BB", "BE", "VC", "VE", "LH", "FE"]:
                     self.connection_counts[position_index1] += 1
-                    #    print(f"Connection Counts {piece1}", self.connection_counts[position_index1])
+
                     return True
-                if piece1 == "FD" and piece2 in self.pieces["Fecho"]:
-                    self.add_impossible_piece(row1, col1, "FD")
+
 
             if col1 > col2:  # piece1 is left-oriented
                 if piece1 == "FE" and piece2 in ["BC", "BB", "BD", "VB", "VD", "LH"]:
@@ -426,14 +489,11 @@ class Board:
                     #    print(f"Connection Counts {piece1}", self.connection_counts[position_index1])
                     self.connection_counts[position_index1] += 1
                     return True
-                if piece1 == "FE" and piece2 in self.pieces["Fecho"]:
-                    self.add_impossible_piece(row1, col1, "FE")
-            return False
+
 
 
         elif col1 == col2:  # Vertical connection
 
-            #    print("Equal col, row1:", row1, "row2:", row2, "piece1:", piece1, "piece2:", piece2)
             if row1 > row2:  # piece1 is top-oriented
                 if piece1 in ["BE", "BD", "BC", "VC", "VD", "LV"] and piece2 in ["BD", "BB", "BE", "VB", "VE", "LV", "FB"]:
                     self.connection_counts[position_index1] += 1
@@ -441,8 +501,7 @@ class Board:
                 if piece1 == "FC" and piece2 in ["BB", "BE", "BD", "VB", "VE", "LV"]:
                     self.connection_counts[position_index1] += 1
                     return True
-                if piece1 == "FC" and piece2 in self.pieces["Fecho"]:
-                    self.add_impossible_piece(row1, col1, "FC")
+
 
             if row1 < row2:  # piece1 is bottom-oriented
                 if piece1 in ["BE", "BD", "BB", "VB", "VE", "LV"] and piece2 in ["BD", "BE", "BC", "VC", "VD", "LV", "FC"]:
@@ -451,18 +510,14 @@ class Board:
                 if piece1 == "FB" and piece2 in ["BC", "BE", "BD", "VC", "VD", "LV"]:
                     self.connection_counts[position_index1] += 1
                     return True
-                if piece1 == "FB" and piece2 in self.pieces["Fecho"]:
-                    self.add_impossible_piece(row1, col1, "FB")
-            return False
 
-    #    print("RETURN FALSE")
+        return False
 
     def valid_board(self):
         """ Verifica se um tabuleiro é valido ou não."""
         for row in range(self.rows):
             for col in range(self.cols):
                 piece = self.get_value(row, col)
-                #print("PIECE: ", piece, "Connection Counts: ", self.connection_counts[row * self.cols + col])
                 if piece == " ":
                     continue
                 position_index = row * self.cols + col
@@ -510,30 +565,82 @@ class PipeMania(Problem):
     def actions(self, state):
         """Retorna uma lista de ações possíveis a partir do estado atual."""
         actions = []
+        break_flag = False  # initialize the flag
         for row in range(state.board.rows):
             for col in range(state.board.cols):
+                #break_flag = False
                 current_value = state.board.get_value(row, col)
-                for direction in Board.rotate_directions:
-                    if state.board.is_piece_connected(row, col):
-                        continue
-                    new_value = state.board.rotate_piece(row, col, direction)
-                    if new_value != current_value:
-                        actions.append((row, col, direction))
+
+                if state.board.is_piece_connected(row, col):
+                    #print("Piece is connected", row, col, current_value)
+                    continue
+
+                if state.board.are_rotations_possible(row, col) is False:
+                    #print("Forcing rotation to connect", row, col)
+                    for drow, dcol in state.board.directions:
+                        adj_row, adj_col = row + drow, col + dcol
+                        if 0 <= adj_row < state.board.rows and 0 <= adj_col < state.board.cols:
+                            #if state.board.are_rotations_possible(adj_row, adj_col):
+                            current_adj_value = state.board.get_value(adj_row, adj_col)
+                            if state.board.get_value(adj_row, adj_col) in state.board.pieces["Fecho"] and state.board.get_value(row, col) in state.board.pieces["Fecho"]:
+                                break
+                            #print("Rotating piece at row:", adj_row, "col:", adj_col, "from", state.board.get_value(adj_row, adj_col), "to connect", row, col)
+                            #print("New value", new_adj_value, "old value", current_adj_value)
+
+                            while True:
+                                #print("Hey")
+                                if state.board.are_rotations_possible(adj_row, adj_col) is False:
+                                    break
+                                if state.board.is_adjacent_rotation_smart(row,col, adj_row, adj_col) is False:
+                                    break
+                                new_adj_value = state.board.rotate_piece(adj_row, adj_col, "clockwise")
+                                state.board.set_value(adj_row, adj_col, new_adj_value)
+                                #print(state.board.get_value(row, col), state.board.get_value(adj_row, adj_col))
+                                #print("Setting value", adj_row, adj_col, new_adj_value)
+                                if state.board.is_connected((row, col), (adj_row, adj_col)):
+                                    #print("Alo")
+                                    state.board.set_value(adj_row, adj_col, current_adj_value)
+                                    actions.append((adj_row, adj_col, "clockwise", new_adj_value))
+                                    #print("forced loop: appending", adj_row, adj_col, "clockwise", new_adj_value)
+                                    break_flag = True
+                                    break
+
+                                #new_adj_value = state.board.rotate_piece(adj_row, adj_col, "clockwise")
+
+
+                           # print("New value", new_adj_value, "old value", current_adj_value)
+                           # if new_adj_value != current_adj_value:
+                           #     print("o/a appending", adj_row, adj_col, "clockwise", new_adj_value)
+                           #     actions.append((adj_row, adj_col, "clockwise",new_adj_value))
+                           #     continue
+
+
+                if break_flag:
+                    break
+                print("Checking", row, col)
+                new_value = state.board.rotate_piece(row, col, "clockwise")
+                if new_value != current_value :
+                    print("o/a appending", row, col, "clockwise", new_value)
+                    actions.append((row, col, "clockwise", new_value))
         return actions
 
     def result(self, state, action):
         """Retorna o estado resultante após executar a ação no estado atual."""
-        row, col, direction = action
+        row, col, direction, value = action
+        #print(action)
         new_board = [list(row) for row in state.board.board]
         new_board_obj = Board(new_board, state.board.rows, state.board.cols)
-        current_value = new_board_obj.get_value(row, col)
-        new_value = state.board.rotate_piece(row, col, direction)
+        new_value = value
+        #print("Setting value", row, col, new_value)
         new_board_obj.set_value(row, col, new_value)
-        """print("\n")
+
+        print("\n")
         print("--------------------")
-        for row in new_board:
+        for row in new_board_obj.board:
             print('\t'.join(row))
-        print("--------------------")"""
+        print("--------------------")
+        print("\n")
+
 
         return PipeManiaState(new_board_obj, (row, col))
 
@@ -554,8 +661,8 @@ class PipeMania(Problem):
 
     def h(self, node):
         """Função heurística que estima a distância do estado atual ao estado objetivo."""
-        connections = node.state.board.count_board_connections()
-        return node.state.board.rows * node.state.board.cols - connections
+        state = node.state
+        return sum(1 for row in range(state.board.rows) for col in range(state.board.cols) if not state.board.is_piece_connected(row, col))
 
 
 
